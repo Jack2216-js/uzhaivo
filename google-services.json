@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "422075823276",
+    "project_id": "uzhaivo",
+    "storage_bucket": "uzhaivo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:422075823276:android:21fea45cf71802f8e85b09",
+        "android_client_info": {
+          "package_name": "com.uzhaivo.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDolsA6SHVucWNgXl5dzZ5Re8bqS42q28"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
