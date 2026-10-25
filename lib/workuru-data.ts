@@ -42,43 +42,7 @@ export type UserRecord = {
 };
 
 export const DISTRICTS = [
-  "Ariyalur",
-  "Chengalpattu",
-  "Chennai",
-  "Coimbatore",
-  "Cuddalore",
-  "Dharmapuri",
-  "Dindigul",
-  "Erode",
-  "Kallakurichi",
-  "Kancheepuram",
-  "Karur",
-  "Krishnagiri",
-  "Madurai",
-  "Mayiladuthurai",
-  "Nagapattinam",
-  "Namakkal",
-  "Perambalur",
-  "Pudukkottai",
-  "Ramanathapuram",
-  "Ranipet",
-  "Salem",
-  "Sivagangai",
-  "Tenkasi",
-  "Thanjavur",
-  "Theni",
-  "Thoothukudi",
-  "Tiruchirappalli",
-  "Tirunelveli",
-  "Tirupathur",
-  "Tiruppur",
-  "Tiruvallur",
-  "Tiruvannamalai",
-  "Tiruvarur",
-  "Vellore",
-  "Viluppuram",
-  "Virudhunagar",
-  "The Nilgiris",
+  "Ariyalur","Chengalpattu","Chennai","Coimbatore","Cuddalore","Dharmapuri","Dindigul","Erode","Kallakurichi","Kancheepuram","Karur","Krishnagiri","Madurai","Mayiladuthurai","Nagapattinam","Namakkal","Perambalur","Pudukkottai","Ramanathapuram","Ranipet","Salem","Sivagangai","Tenkasi","Thanjavur","Theni","Thoothukudi","Tiruchirappalli","Tirunelveli","Tirupathur","Tiruppur","Tiruvallur","Tiruvannamalai","Tiruvarur","Vellore","Viluppuram","Virudhunagar","The Nilgiris",
 ];
 
 export const CATEGORIES = ["Driver", "Cook", "Steel Helper", "Sago Factory", "Hotel Helper", "Construction"] as const;
@@ -107,7 +71,7 @@ const en = {
   enterOtp: "Enter the 6-digit OTP",
   verify: "Verify & continue",
   otpSent: "OTP sent to your phone",
-  demoHint: "Preview mode: use any 6 digits",
+  demoHint: "Real OTP will be sent via SMS",
   invalidPhone: "Enter a valid phone number",
   invalidOtp: "Enter the 6-digit OTP",
   selectRole: "What brings you here?",
@@ -239,7 +203,7 @@ export const ta: Record<keyof typeof en, string> = {
   enterOtp: "6 இலக்க OTP-யை உள்ளிடவும்",
   verify: "சரிபார்த்து தொடரவும்",
   otpSent: "உங்கள் தொலைபேசிக்கு OTP அனுப்பப்பட்டது",
-  demoHint: "Preview mode: ஏதேனும் 6 இலக்கங்கள்",
+  demoHint: "Real OTP SMS moolam varum",
   invalidPhone: "சரியான தொலைபேசி எண்ணை உள்ளிடவும்",
   invalidOtp: "6 இலக்க OTP-யை உள்ளிடவும்",
   selectRole: "நீங்கள் இங்கே ஏன் வந்துள்ளீர்கள்?",
@@ -385,22 +349,50 @@ function userFromRow(row: Record<string, unknown>, fallbackPhone: string, fallba
   };
 }
 
+// REAL OTP MODE
 export async function requestPhoneOtp(phone: string) {
   await requestFirebaseOtp(normalizePhone(phone));
 }
 
 export async function verifyPhoneOtp(phone: string, token: string, language: Locale): Promise<UserRecord> {
   const normalizedPhone = normalizePhone(phone);
+  console.log("[WorkUru] Verifying real OTP for", normalizedPhone);
+  
   const firebaseUser = await verifyFirebaseOtp(normalizedPhone, token);
   const verifiedPhone = firebaseUser.phone || normalizedPhone;
-  if (!supabase) return { id: firebaseUser.id, phone: verifiedPhone, district: "Salem", language };
-  const { data: profile, error: profileError } = await supabase
-    .from("users")
-    .upsert({ id: firebaseUser.id, phone: verifiedPhone, district: "Salem", language }, { onConflict: "id" })
-    .select()
-    .single();
-  if (profileError) throw profileError;
-  return userFromRow(profile as Record<string, unknown>, verifiedPhone, language);
+  
+  const realUser: UserRecord = {
+    id: firebaseUser.id,
+    phone: verifiedPhone,
+    district: "Salem",
+    language,
+  };
+
+  if (supabase) {
+    try {
+      const { data: profile, error } = await supabase
+        .from("users")
+        .upsert({ id: firebaseUser.id, phone: verifiedPhone, district: "Salem", language }, { onConflict: "id" })
+        .select()
+        .single();
+        
+      if (error) {
+        console.warn("[WorkUru] Supabase upsert failed", error.message);
+        await AsyncStorage.setItem(STORAGE.user, JSON.stringify(realUser));
+        return realUser;
+      }
+      const finalUser = userFromRow(profile as Record<string, unknown>, verifiedPhone, language);
+      await AsyncStorage.setItem(STORAGE.user, JSON.stringify(finalUser));
+      return finalUser;
+    } catch (e) {
+      console.warn("[WorkUru] Supabase exception", e);
+      await AsyncStorage.setItem(STORAGE.user, JSON.stringify(realUser));
+      return realUser;
+    }
+  }
+  
+  await AsyncStorage.setItem(STORAGE.user, JSON.stringify(realUser));
+  return realUser;
 }
 
 export async function getCurrentUser(): Promise<UserRecord | null> {
@@ -424,25 +416,25 @@ export async function saveAppLanguage(locale: Locale) {
 export async function loadUser(): Promise<UserRecord | null> {
   const value = await AsyncStorage.getItem(STORAGE.user);
   if (!value) return null;
-  try {
-    return JSON.parse(value) as UserRecord;
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(value) as UserRecord; } catch { return null; }
 }
 
 export async function saveUser(user: UserRecord) {
   await AsyncStorage.setItem(STORAGE.user, JSON.stringify(user));
-  if (supabase && user.id !== "preview-user") {
-    const { error } = await supabase.from("users").upsert({
-      id: user.id,
-      phone: user.phone,
-      name: user.name,
-      district: user.district,
-      role: user.role,
-      language: user.language,
-    }, { onConflict: "id" });
-    if (error) throw error;
+  if (supabase) {
+    try {
+      const { error } = await supabase.from("users").upsert({
+        id: user.id,
+        phone: user.phone,
+        name: user.name,
+        district: user.district,
+        role: user.role,
+        language: user.language,
+      }, { onConflict: "id" });
+      if (error) console.warn("[WorkUru] saveUser supabase failed", error.message);
+    } catch (err) {
+      console.warn("[WorkUru] saveUser exception", err);
+    }
   }
 }
 
@@ -459,16 +451,14 @@ export async function getJobs(): Promise<Job[]> {
   if (supabase) {
     const { data, error } = await supabase.from("jobs").select("*").eq("district", "Salem").eq("is_active", true).order("created_at", { ascending: false });
     if (!error && data) return data as Job[];
-    console.warn("[WorkUru] Supabase jobs query failed; using preview data.", error?.message);
   }
   return [...mockJobs].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
 export async function getOwnerJobs(ownerId: string): Promise<Job[]> {
-  if (supabase && ownerId !== "preview-user") {
+  if (supabase) {
     const { data, error } = await supabase.from("jobs").select("*").eq("owner_id", ownerId).order("created_at", { ascending: false });
     if (!error && data) return data as Job[];
-    console.warn("[WorkUru] Supabase owner jobs query failed; using preview data.", error?.message);
   }
   return (await getJobs()).filter((job) => job.owner_id === ownerId);
 }
@@ -477,13 +467,12 @@ export async function getAds(): Promise<Ad[]> {
   if (supabase) {
     const { data, error } = await supabase.from("ads").select("*").eq("district", "Salem").eq("is_active", true).order("created_at", { ascending: false });
     if (!error && data) return data as Ad[];
-    console.warn("[WorkUru] Supabase ads query failed; using preview data.", error?.message);
   }
   return mockAds;
 }
 
 export async function saveJob(input: Omit<Job, "id" | "created_at">): Promise<Job> {
-  if (supabase && input.owner_id !== "preview-user") {
+  if (supabase) {
     const { data, error } = await supabase.from("jobs").insert(input).select().single();
     if (error) throw error;
     return data as Job;

@@ -1,8 +1,7 @@
 // Load environment variables with proper priority (system > .env)
 import "./scripts/load-env.js";
-import type { ExpoConfig } from "expo/config";
+import type { ExpoConfig } from "@expo/config";
 
-// Bundle ID format: space.manus.<project_name_dots>.<timestamp>
 const rawBundleId = "space.manus.workuru.t078369508690081";
 const bundleId =
   rawBundleId
@@ -55,7 +54,7 @@ const config: ExpoConfig = {
   extra: {
     ...publicRuntime,
     eas: {
-      projectId: "5ea21675-19ea-4205-b55a-23f639600b82"
+      projectId: "9491ffff-8fac-416f-ac55-e81f48e93ea4"
     }
   },
   orientation: "portrait",
@@ -65,9 +64,9 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false
+    }
   },
   android: {
     adaptiveIcon: {
@@ -132,11 +131,13 @@ const config: ExpoConfig = {
       "expo-build-properties",
       {
         android: {
-          buildArchs: ["armeabi-v7a", "arm64-v8a"],
+          compileSdkVersion: 36,
+          targetSdkVersion: 36,
           minSdkVersion: 24,
-        },
-      },
-    ],
+          kotlinVersion: "2.1.20"
+        }
+      }
+    ]
   ],
   experiments: {
     typedRoutes: true,
