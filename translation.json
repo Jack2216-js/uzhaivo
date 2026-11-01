@@ -1,0 +1,24 @@
+{
+  "en": {
+    "location": "LOCATION",
+    "workDetails": "Work Details",
+    "type": "Type",
+    "perDay": "Per Day"
+  },
+  "ta": {
+    "location": "இடம்",
+    "timing": "நேரம்",
+    "workers": "தொழிலாளர்கள்",
+    "jobType": "வேலை வகை",
+    "workDetails": "வேலை விவரங்கள்",
+    "type": "வேலை வகை",
+    "time": "நேரம்",
+    "need": "தேவை",
+    "salary": "சம்பளம்",
+    "urgency": "அவசரம்",
+    "range": "வரம்பு",
+    "perDay": "நாள் ஒன்றுக்கு",
+    "morning": "காலை",
+    "today": "இன்று"
+  }
+}
