@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "scheme": "uzhaivo",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "newArchEnabled": true,
     "splash": {
       "resizeMode": "contain",
@@ -15,7 +16,11 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.jacksonsri.uzhaivo"
+      "package": "com.jacksonsri.uzhaivo",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "web": {
       "bundler": "metro",

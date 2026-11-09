@@ -8,6 +8,22 @@ import { getFirebaseUser, requestFirebaseOtp, signOutFirebase, verifyFirebaseOtp
 export type Locale = "en" | "ta";
 export type Role = "worker" | "owner";
 
+export type PlatformSettings = {
+  applications_enabled?: boolean;
+  proof_submissions_enabled?: boolean;
+  owner_contact_requires_approval?: boolean;
+  auto_decrement_need?: boolean;
+  auto_delete_filled_jobs?: boolean;
+  include_worker_profile_snapshot?: boolean;
+  allow_owner_front_back_selection?: boolean;
+  default_proof_side?: "front" | "back" | "both";
+  allowed_proof_types?: string[];
+  app_theme?: "light" | "dark";
+  app_font_size?: "Small" | "Medium" | "Large";
+  app_language?: Locale;
+  app_version?: string;
+};
+
 export type Job = {
   id: string;
   title: string;
@@ -477,6 +493,14 @@ export async function getCurrentUser(): Promise<UserRecord | null> {
   return profile ? userFromRow(profile as Record<string, unknown>, firebaseUser.phone, "ta") : { id: firebaseUser.id, phone: firebaseUser.phone, district: "Tamil Nadu", language: "ta" };
 }
 
+export async function getPlatformSettings(): Promise<PlatformSettings> {
+  try {
+    const { data, error } = await (supabase as any).from("platform_settings").select("settings").eq("id", "global").maybeSingle();
+    if (!error && data?.settings && typeof data.settings === "object") return data.settings as PlatformSettings;
+  } catch (error) { console.warn("[Uzhaivo] platform settings unavailable:", error); }
+  return {};
+}
+
 export async function loadAppLanguage(): Promise<Locale | null> {
   const value = await AsyncStorage.getItem(STORAGE.language);
   return value === "ta" || value === "en" ? value : null;
@@ -559,6 +583,11 @@ export async function saveJob(input: Omit<Job, "id" | "created_at">): Promise<Jo
         phone: input.phone,
         description: input.description,
         image_url: input.image_url || null,
+        proof_required: Boolean((input as any).proof_required || (input as any).requires_proof),
+        requires_proof: Boolean((input as any).proof_required || (input as any).requires_proof),
+        proof_types: (input as any).proof_types || [],
+        proof_description: (input as any).proof_description || "",
+        proof_image_url: (input as any).proof_image_url || null,
         is_active: true,
         owner_id: input.owner_id,
       };
@@ -624,6 +653,11 @@ export async function updateJob(jobId: string, updates: Partial<Job>): Promise<J
           phone: updates.phone,
           description: updates.description,
           image_url: updates.image_url,
+          proof_required: (updates as any).proof_required,
+          requires_proof: (updates as any).requires_proof,
+          proof_types: (updates as any).proof_types,
+          proof_description: (updates as any).proof_description,
+          proof_image_url: (updates as any).proof_image_url,
         })
         .eq("id", jobId)
         .select()
@@ -782,6 +816,159 @@ export async function deleteUserProof(proofId: string): Promise<boolean> {
   if (supabase) { try { await (supabase as any).from("user_proofs").delete().eq("id", proofId); } catch {} }
   return true;
 }
+
+export type JobApplicationStatus = "pending" | "approved" | "rejected";
+export type JobApplication = {
+  id: string;
+  job_id: string;
+  worker_id: string;
+  worker_phone?: string;
+  worker_name?: string;
+  job_title?: string;
+  owner_id?: string;
+  proof_type?: string;
+  proof_image_url?: string;
+  proof_urls?: Record<string, string>;
+  status: JobApplicationStatus;
+  created_at: string;
+  updated_at?: string;
+};
+
+const LOCAL_APPLICATIONS_KEY = "uzhaivo_job_applications";
+
+async function getLocalApplications(): Promise<JobApplication[]> {
+  const raw = await AsyncStorage.getItem(LOCAL_APPLICATIONS_KEY);
+  if (!raw) return [];
+  try { return JSON.parse(raw) as JobApplication[]; } catch { return []; }
+}
+
+async function saveLocalApplications(applications: JobApplication[]) {
+  await AsyncStorage.setItem(LOCAL_APPLICATIONS_KEY, JSON.stringify(applications));
+}
+
+export async function getJobApplication(jobId: string, workerId?: string): Promise<JobApplication | null> {
+  const user = await loadUser();
+  const targetWorkerId = workerId || user?.id;
+  if (!targetWorkerId) return null;
+  if (supabase) {
+    try {
+      const { data, error } = await (supabase as any).from("job_applications").select("*").eq("job_id", jobId).eq("worker_id", targetWorkerId).order("created_at", { ascending: false }).limit(1);
+      if (!error && data?.length) return data[0] as JobApplication;
+      if (!error) return null;
+      if (error && !["42P01", "PGRST205"].includes(error.code)) throw error;
+    } catch (e: any) {
+      console.warn("[Uzhaivo] getJobApplication:", e?.message || e);
+    }
+  }
+  const local = await getLocalApplications();
+  return local.filter((a) => a.job_id === jobId && a.worker_id === targetWorkerId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0] || null;
+}
+
+export async function submitJobApplication(input: { job: Job; worker: UserRecord; proofType: string; proofImageUrl: string; proofUrls?: Record<string, any> }): Promise<JobApplication> {
+  if (!input.proofType) throw new Error("Please select proof type");
+  if (!input.proofImageUrl) throw new Error("Please select proof photo");
+  const existing = await getJobApplication(input.job.id, input.worker.id);
+  if (existing?.status === "rejected") throw new Error("Already rejected for this job");
+  if (existing) throw new Error("Proof already submitted for this job");
+  const now = new Date().toISOString();
+  const proofUrls = {
+    ...(input.proofUrls || { front: input.proofImageUrl }),
+    _worker_profile: {
+      name: input.worker.name || "Uzhaivo Worker",
+      phone: input.worker.phone || "",
+      location: (input.worker as any).district || (input.worker as any).location || "Tamil Nadu",
+      skill: (input.worker as any).skill || "",
+      experience: (input.worker as any).experience || "",
+      photo: await AsyncStorage.getItem("uzhaivo_profile_photo").catch(() => null),
+    },
+  };
+  const payload = {
+    job_id: input.job.id,
+    worker_id: input.worker.id,
+    worker_phone: input.worker.phone,
+    worker_name: input.worker.name || input.worker.phone,
+    job_title: input.job.title,
+    owner_id: input.job.owner_id,
+    proof_type: input.proofType,
+    proof_image_url: input.proofImageUrl,
+    proof_urls: proofUrls,
+    status: "pending",
+    created_at: now,
+    updated_at: now,
+  };
+  if (supabase) {
+    const { data, error } = await (supabase as any).from("job_applications").insert(payload).select().single();
+    if (!error && data) return data as JobApplication;
+    if (error) throw new Error(error.message || "Proof submission failed");
+  }
+  const localApplication = { id: `application-${Date.now()}`, ...payload } as JobApplication;
+  const local = await getLocalApplications();
+  await saveLocalApplications([localApplication, ...local]);
+  return localApplication;
+}
+
+export function subscribeToJobApplication(jobId: string, workerId: string, callback: (application: JobApplication | null) => void) {
+  if (!supabase) return () => {};
+  const channel = (supabase as any).channel(`job-application-${jobId}-${workerId}`).on("postgres_changes", { event: "*", schema: "public", table: "job_applications", filter: `job_id=eq.${jobId}` }, async () => {
+    callback(await getJobApplication(jobId, workerId));
+  }).subscribe();
+  return () => { try { (supabase as any).removeChannel(channel); } catch {} };
+}
+
+export async function getWorkerApplications(workerId?: string): Promise<JobApplication[]> {
+  const user = await loadUser();
+  const targetWorkerId = workerId || user?.id;
+  if (!targetWorkerId) return [];
+  if (supabase) {
+    const { data, error } = await (supabase as any).from("job_applications").select("*").eq("worker_id", targetWorkerId).order("updated_at", { ascending: false });
+    if (!error && data) {
+      const unique = new Map<string, JobApplication>();
+      (data as JobApplication[]).forEach((row) => { if (!unique.has(row.job_id)) unique.set(row.job_id, row); });
+      return Array.from(unique.values());
+    }
+    if (error) console.warn("[Uzhaivo] getWorkerApplications:", error.message);
+  }
+  const local = await getLocalApplications();
+  const unique = new Map<string, JobApplication>();
+  local.filter((a) => a.worker_id === targetWorkerId).sort((a, b) => (b.updated_at || b.created_at).localeCompare(a.updated_at || a.created_at)).forEach((row) => { if (!unique.has(row.job_id)) unique.set(row.job_id, row); });
+  return Array.from(unique.values());
+}
+
+export function subscribeToWorkerApplications(workerId: string, callback: (applications: JobApplication[]) => void) {
+  if (!supabase) return () => {};
+  const channel = (supabase as any).channel(`worker-applications-${workerId}`).on("postgres_changes", { event: "*", schema: "public", table: "job_applications", filter: `worker_id=eq.${workerId}` }, async () => {
+    callback(await getWorkerApplications(workerId));
+  }).subscribe();
+  return () => { try { (supabase as any).removeChannel(channel); } catch {} };
+}
+
+export async function getOwnerApplications(ownerId?: string): Promise<JobApplication[]> {
+  const user = await loadUser();
+  const targetOwnerId = ownerId || user?.id;
+  if (!targetOwnerId) return [];
+  if (supabase) {
+    const { data, error } = await (supabase as any).from("job_applications").select("*").eq("owner_id", targetOwnerId).order("created_at", { ascending: false });
+    if (!error && data) return data as JobApplication[];
+    if (error) console.warn("[Uzhaivo] getOwnerApplications:", error.message);
+  }
+  return [];
+}
+
+export async function updateJobApplicationStatus(applicationId: string, status: JobApplicationStatus): Promise<JobApplication> {
+  if (!supabase) throw new Error("Supabase not configured");
+  const { data, error } = await (supabase as any).from("job_applications").update({ status, updated_at: new Date().toISOString() }).eq("id", applicationId).select().single();
+  if (error) throw new Error(error.message || "Could not update application");
+  return data as JobApplication;
+}
+
+export function subscribeToOwnerApplications(ownerId: string, callback: (applications: JobApplication[]) => void) {
+  if (!supabase) return () => {};
+  const channel = (supabase as any).channel(`owner-applications-${ownerId}`).on("postgres_changes", { event: "*", schema: "public", table: "job_applications", filter: `owner_id=eq.${ownerId}` }, async () => {
+    callback(await getOwnerApplications(ownerId));
+  }).subscribe();
+  return () => { try { (supabase as any).removeChannel(channel); } catch {} };
+}
+
 export function getProofTranslation(proofType: string, locale: Locale) { const entry = PROOF_TYPE_TRANSLATIONS[proofType]; if (!entry) return proofType; return locale === "ta" ? entry.ta : entry.en; }
 export function getProofIcon(proofType: string) { const entry = PROOF_TYPE_TRANSLATIONS[proofType]; return entry?.icon || "file-document"; }
 
