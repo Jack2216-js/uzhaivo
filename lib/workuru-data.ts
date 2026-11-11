@@ -454,9 +454,15 @@ async function addOwnerVerification(jobs: Job[]): Promise<Job[]> {
   try {
     const ownerIds = [...new Set(jobs.map((job) => job.owner_id).filter(Boolean))];
     if (!ownerIds.length) return jobs;
-    const { data, error } = await (supabase as any).from("users").select("id,admin_verified,owner_verified,verification_status").in("id", ownerIds);
+    const { data, error } = await (supabase as any).from("users").select("id,phone,admin_verified,owner_verified,verification_status").in("id", ownerIds);
     if (error || !data) return jobs;
     const verified = new Set((data as any[]).filter((row) => row.admin_verified === true || row.owner_verified === true || row.verification_status === "approved").map((row) => String(row.id)));
+    try {
+      const phones = (data as any[]).map((row) => row.phone).filter(Boolean);
+      const { data: approved } = await (supabase as any).from("owner_verifications").select("owner_phone").in("owner_phone", phones).eq("status", "approved");
+      const approvedPhones = new Set((approved || []).map((row: any) => String(row.owner_phone)));
+      (data as any[]).forEach((row) => { if (approvedPhones.has(String(row.phone))) verified.add(String(row.id)); });
+    } catch {}
     return jobs.map((job) => ({ ...job, owner_verified: verified.has(String(job.owner_id)) }));
   } catch {
     return jobs;
@@ -835,7 +841,14 @@ export async function getOwnerVerificationStatus(userId: string): Promise<{ veri
   if (supabase) {
     try {
       const { data } = await (supabase as any).from("users").select("admin_verified,owner_verified,verification_status").eq("id", userId).maybeSingle();
-      const verified = data?.admin_verified === true || data?.owner_verified === true || data?.verification_status === "approved";
+      let verified = data?.admin_verified === true || data?.owner_verified === true || data?.verification_status === "approved";
+      if (!verified) {
+        const user = await (supabase as any).from("users").select("phone").eq("id", userId).maybeSingle();
+        if (user?.data?.phone) {
+          const ownerReview = await (supabase as any).from("owner_verifications").select("id").eq("owner_phone", user.data.phone).eq("status", "approved").limit(1);
+          verified = Boolean(ownerReview?.data?.length);
+        }
+      }
       const status = verified ? "approved" : data?.verification_status === "rejected" ? "rejected" : "pending";
       return { verified, status, proofCount: proofs.length };
     } catch {}
