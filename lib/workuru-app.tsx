@@ -1200,15 +1200,23 @@ function AppliedJobsScreen({ user, locale, onOpenJob }: any) {
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [jobsById, setJobsById] = useState<Record<string, Job>>({});
   const [refreshing, setRefreshing] = useState(false);
+  const isCompletedJob = (job: Job | null) => {
+    if (!job) return true;
+    const match = (job.description || "").match(/Need:([^|]+)/);
+    return match ? Number.parseInt(match[1].trim(), 10) <= 0 : false;
+  };
   const loadApplications = useCallback(async () => {
     if (!user?.id) return;
     setRefreshing(true);
     try {
       const rows = await getWorkerApplications(user.id);
-      setApplications(rows);
       const pairs = await Promise.all(rows.map(async (row) => [row.job_id, await getJobById(row.job_id)] as const));
       const next: Record<string, Job> = {};
-      pairs.forEach(([id, job]) => { if (job) next[id] = job; });
+      const activeApplications: JobApplication[] = [];
+      pairs.forEach(([id, job], index) => {
+        if (job && !isCompletedJob(job)) { next[id] = job; activeApplications.push(rows[index]); }
+      });
+      setApplications(activeApplications);
       setJobsById(next);
     } catch (e) { console.warn("[Uzhaivo] applied jobs load failed", e); }
     finally { setRefreshing(false); }

@@ -18,3 +18,7 @@
 - Approving a worker application decrements the job Need count.
 - When Need reaches zero, the job is automatically removed.
 - Worker application status is updated and the worker is notified after approval or rejection.
+
+## Applied Jobs cleanup
+- Remove an applied job from the worker's Applied Jobs list when the owner deletes it.
+- Remove an applied job when its remaining Need reaches zero and the job is completed.
