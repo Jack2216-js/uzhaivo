@@ -713,12 +713,12 @@ function MyPostedJobsScreen({ jobs, user, locale, onEdit, onDelete, refreshing, 
   );
 }
 
-function JobsBrowserScreen({ locale, filteredJobs, filter, setFilter, search, setSearch, categoryCounts, nearActive, handleNear, locLoading, saved, onSave, onOpen }: any) {
+function JobsBrowserScreen({ locale, filteredJobs, filter, setFilter, search, setSearch, categoryCounts, nearActive, handleNear, locLoading, saved, approvedJobIds, onSave, onOpen, onCall }: any) {
   return <>
     <View style={styles.welcomeRow}><View><Text style={styles.eyebrowText}>{locale === "ta" ? "வேலை வாய்ப்புகள்" : "AVAILABLE JOBS"}</Text><Text style={styles.pageTitle}>{locale === "ta" ? "உங்கள் நாளுக்கு\nஏற்ற வேலையை\nகண்டறியுங்கள்" : "Find work that\nfits your day."}</Text></View><View style={styles.locationPill}><MaterialCommunityIcons name="map-marker" size={12} color={ORANGE} /><Text style={styles.locationPillText}>{locale === "ta" ? `தமிழ்நாடு • ${filteredJobs.length} வேலைகள்` : `Tamil Nadu • ${filteredJobs.length} jobs`}</Text></View></View>
     <View style={homeStyles.searchWrap}><View style={homeStyles.searchBox}><MaterialCommunityIcons name="magnify" size={20} color={MUTED} /><TextInput value={search} onChangeText={setSearch} placeholder={locale === "ta" ? "வேலை தேடுங்கள், எ.கா. கொத்தனார்" : "Search work, e.g. Mason, Driver"} style={homeStyles.searchInput} placeholderTextColor="#B8A99D" />{search.length > 0 && <Pressable onPress={() => setSearch("")}><MaterialCommunityIcons name="close-circle" size={18} color={MUTED} /></Pressable>}</View><Pressable onPress={handleNear} style={[homeStyles.locationBtn, nearActive && homeStyles.locationBtnActive]}>{locLoading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name={nearActive ? "crosshairs-gps" : "navigation-variant-outline"} size={16} color="#fff" />}<Text style={homeStyles.locationBtnText}>{nearActive ? (locale === "ta" ? "அருகில் ✓" : "Near ✓") : (locale === "ta" ? "அருகில்" : "Near")}</Text></Pressable></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>{["All", ...CATEGORIES].map((c) => { const count = categoryCounts[c] || 0; const isActive = filter === c; if (c !== "All" && count === 0) return null; return (<Pressable key={c} onPress={() => { Haptics.selectionAsync(); setFilter(c); }} style={[styles.filterChip, isActive && styles.filterChipActive]}><Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>{getCategoryName(c, locale)} {count > 0 ? `(${count})` : ""}</Text></Pressable>); })}</ScrollView>
-    {filteredJobs.length === 0 ? <View style={homeStyles.emptyBox}><MaterialCommunityIcons name="briefcase-search-outline" size={34} color={MUTED} /><Text style={homeStyles.emptyTitle}>{locale === "ta" ? "வேலைகள் இல்லை" : "No available jobs"}</Text><Text style={homeStyles.emptySub}>{locale === "ta" ? "பின்னர் மீண்டும் பார்க்கவும்" : "Check again later for new opportunities."}</Text></View> : filteredJobs.map((job: Job) => <ModernJobCard key={job.id} job={job} isSaved={saved.includes(job.id)} locale={locale} onSave={() => onSave(job)} onOpen={() => onOpen(job)} />)}
+    {filteredJobs.length === 0 ? <View style={homeStyles.emptyBox}><MaterialCommunityIcons name="briefcase-search-outline" size={34} color={MUTED} /><Text style={homeStyles.emptyTitle}>{locale === "ta" ? "வேலைகள் இல்லை" : "No available jobs"}</Text><Text style={homeStyles.emptySub}>{locale === "ta" ? "பின்னர் மீண்டும் பார்க்கவும்" : "Check again later for new opportunities."}</Text></View> : filteredJobs.map((job: Job) => <ModernJobCard key={job.id} job={job} isSaved={saved.includes(job.id)} locale={locale} showCall={approvedJobIds.includes(job.id)} onCall={() => onCall(job)} onSave={() => onSave(job)} onOpen={() => onOpen(job)} />)}
   </>;
 }
 
@@ -1375,7 +1375,7 @@ export function UzhaivoApp() {
   const [step, setStep] = useState<"splash" | "lang" | "login" | "otp" | "role" | "home" | "calls" | "profile" | "addJob" | "detail" | "myJobs" | "terms" | "privacy">("splash");
   const [phone, setPhone] = useState(""); const [otp, setOtp] = useState(""); const [loading, setLoading] = useState(false); const [loadingMsg, setLoadingMsg] = useState("");
   const [user, setUser] = useState<UserRecord | null>(null); const [jobs, setJobs] = useState<Job[]>([]); const [saved, setSaved] = useState<string[]>([]); const [activeTab, setActiveTab] = useState<any>("home"); const [filter, setFilter] = useState("All"); const [search, setSearch] = useState(""); const [settingsOpen, setSettingsOpen] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<any>(null); const [callHistory, setCallHistory] = useState<any[]>([]); const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({});
+  const [selectedJob, setSelectedJob] = useState<any>(null); const [callHistory, setCallHistory] = useState<any[]>([]); const [approvedJobIds, setApprovedJobIds] = useState<string[]>([]); const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({});
   const [userLoc, setUserLoc] = useState<{ lat: number, lng: number } | null>(null); const [nearActive, setNearActive] = useState(false); const [locLoading, setLocLoading] = useState(false);
   const [editingJob, setEditingJob] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1393,6 +1393,14 @@ export function UzhaivoApp() {
     });
     return () => { unsubscribe && unsubscribe(); };
   }, []);
+  useEffect(() => {
+    if (!user?.id || user.role === "owner") { setApprovedJobIds([]); return; }
+    let active = true;
+    const loadApproved = async () => { try { const rows = await getWorkerApplications(user.id); if (active) setApprovedJobIds(rows.filter((row) => row.status === "approved").map((row) => row.job_id)); } catch {} };
+    void loadApproved();
+    const unsubscribe = subscribeToWorkerApplications(user.id, (rows) => { if (active) setApprovedJobIds(rows.filter((row) => row.status === "approved").map((row) => row.job_id)); });
+    return () => { active = false; unsubscribe && unsubscribe(); };
+  }, [user?.id, user?.role]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -1455,7 +1463,7 @@ export function UzhaivoApp() {
         )}
         {step !== "detail" && activeTab === "proofs" && user?.role === "owner" && <ReceivedProofsScreen user={user} locale={locale} onJobUpdated={onRefresh} />}
         {step !== "detail" && activeTab === "applied" && user?.role !== "owner" && <AppliedJobsScreen user={user} locale={locale} onOpenJob={(job: Job) => { setSelectedJob(job); setStep("detail"); }} />}
-        {step !== "detail" && activeTab === "home" && <JobsBrowserScreen locale={locale} filteredJobs={filteredJobs} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} categoryCounts={categoryCounts} nearActive={nearActive} handleNear={handleNear} locLoading={locLoading} saved={saved} onSave={async (job: Job) => { const s = await toggleSavedJob(job.id); setSaved(s); }} onOpen={(job: Job) => { setSelectedJob(job); setStep("detail"); }} />}
+        {step !== "detail" && activeTab === "home" && <JobsBrowserScreen locale={locale} filteredJobs={filteredJobs} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} categoryCounts={categoryCounts} nearActive={nearActive} handleNear={handleNear} locLoading={locLoading} saved={saved} approvedJobIds={approvedJobIds} onCall={(job: Job) => { saveCallHistory(job); Linking.openURL(`tel:${job.phone}`); }} onSave={async (job: Job) => { const s = await toggleSavedJob(job.id); setSaved(s); }} onOpen={(job: Job) => { setSelectedJob(job); setStep("detail"); }} />}
         {activeTab === "calls" && step !== "detail" && <CallsScreen calls={callHistory} locale={locale} onCallAgain={(c: any) => Linking.openURL(`tel:${c.phone}`)} onClear={async () => { Alert.alert(locale==="ta" ? "அழைப்புகளை அழிக்கவா?" : "Clear calls?", locale==="ta" ? "எல்லாம் நீக்கப்படும்" : "All call history will be deleted", [{ text: locale==="ta" ? "ரத்து" : "Cancel" }, { text: locale==="ta" ? "அழி" : "Clear", style: "destructive", onPress: async () => { setCallHistory([]); await AsyncStorage.removeItem("uzhaivo_calls"); } }]); }} onGoJobs={() => setActiveTab(user?.role === "owner" ? "addJob" : "home")} />}
         {activeTab === "profile" && step !== "detail" && (
           settingsOpen ? <AppSettingsScreen locale={locale} theme={appTheme} fontSize={appFontSize} onThemeChange={changeAppTheme} onFontSizeChange={changeAppFontSize} onLanguageChange={changeAppLanguage} onClearCache={clearAppCache} onClearData={clearAppData} onBack={() => setSettingsOpen(false)} /> : user?.role === "owner" ? (
