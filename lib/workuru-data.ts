@@ -43,6 +43,7 @@ export type Job = {
   proof_types?: string[];
   proof_description?: string;
   proof_image_url?: string;
+  owner_verified?: boolean;
 };
 
 export type Ad = {
@@ -62,6 +63,8 @@ export type UserRecord = {
   district: string;
   role?: Role;
   language: Locale;
+  admin_verified?: boolean;
+  verification_status?: "pending" | "approved" | "rejected";
 };
 
 export const DISTRICTS = [
@@ -441,7 +444,23 @@ function userFromRow(row: Record<string, unknown>, fallbackPhone: string, fallba
     district: String(row.district ?? "Tamil Nadu"),
     role: row.role === "worker" || row.role === "owner" ? row.role : undefined,
     language: row.language === "en" ? "en" : fallbackLanguage,
+    admin_verified: row.admin_verified === true || row.owner_verified === true || row.verification_status === "approved",
+    verification_status: row.verification_status === "approved" || row.verification_status === "rejected" ? row.verification_status : "pending",
   };
+}
+
+async function addOwnerVerification(jobs: Job[]): Promise<Job[]> {
+  if (!supabase || jobs.length === 0) return jobs;
+  try {
+    const ownerIds = [...new Set(jobs.map((job) => job.owner_id).filter(Boolean))];
+    if (!ownerIds.length) return jobs;
+    const { data, error } = await (supabase as any).from("users").select("id,admin_verified,owner_verified,verification_status").in("id", ownerIds);
+    if (error || !data) return jobs;
+    const verified = new Set((data as any[]).filter((row) => row.admin_verified === true || row.owner_verified === true || row.verification_status === "approved").map((row) => String(row.id)));
+    return jobs.map((job) => ({ ...job, owner_verified: verified.has(String(job.owner_id)) }));
+  } catch {
+    return jobs;
+  }
 }
 
 export async function requestPhoneOtp(phone: string) {
@@ -533,12 +552,12 @@ export async function getJobs(): Promise<Job[]> {
       const { data, error } = await (supabase as any).from("jobs").select("*").eq("is_active", true).order("created_at", { ascending: false });
       if (!error && data && data.length > 0) {
         console.log("[Uzhaivo] Supabase fetched", data.length, "jobs");
-        return data as Job[];
+        return await addOwnerVerification(data as Job[]);
       }
       // If no data or error, try without district filter (show all)
       if (!error) {
         const { data: allData } = await (supabase as any).from("jobs").select("*").eq("is_active", true).order("created_at", { ascending: false });
-        if (allData) return allData as Job[];
+        if (allData) return await addOwnerVerification(allData as Job[]);
       }
     } catch (e) {
       console.warn("[Uzhaivo] getJobs Supabase error", e);
@@ -810,6 +829,18 @@ export async function getUserProofs(userId?: string): Promise<UserProof[]> {
   const user = await loadUser(); const targetId = userId || user?.id; if (!targetId) return [];
   if (supabase) { try { const { data, error } = await (supabase as any).from("user_proofs").select("*").eq("user_id", targetId).order("created_at", { ascending: false }); if (!error && data && data.length > 0) return data as UserProof[]; } catch {} }
   const existing = await AsyncStorage.getItem("uzhaivo_user_proofs"); if (!existing) return []; try { const proofs = JSON.parse(existing) as UserProof[]; return proofs.filter(p => p.user_id === targetId); } catch { return []; }
+}
+export async function getOwnerVerificationStatus(userId: string): Promise<{ verified: boolean; status: "pending" | "approved" | "rejected"; proofCount: number }> {
+  const proofs = await getUserProofs(userId);
+  if (supabase) {
+    try {
+      const { data } = await (supabase as any).from("users").select("admin_verified,owner_verified,verification_status").eq("id", userId).maybeSingle();
+      const verified = data?.admin_verified === true || data?.owner_verified === true || data?.verification_status === "approved";
+      const status = verified ? "approved" : data?.verification_status === "rejected" ? "rejected" : "pending";
+      return { verified, status, proofCount: proofs.length };
+    } catch {}
+  }
+  return { verified: proofs.some((proof) => proof.verified), status: proofs.some((proof) => proof.verified) ? "approved" : "pending", proofCount: proofs.length };
 }
 export async function deleteUserProof(proofId: string): Promise<boolean> {
   const existing = await AsyncStorage.getItem("uzhaivo_user_proofs"); if (existing) { const proofs = JSON.parse(existing).filter((p: UserProof) => p.id !== proofId); await AsyncStorage.setItem("uzhaivo_user_proofs", JSON.stringify(proofs)); }

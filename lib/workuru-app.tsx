@@ -96,7 +96,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import NetInfo from "@react-native-community/netinfo";
 let ExpoLocation: any = null; try { ExpoLocation = require("expo-location"); } catch {}
 let AsyncStorage: any = null; try { AsyncStorage = require("@react-native-async-storage/async-storage").default; } catch { AsyncStorage = { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} }; }
-import { CATEGORIES, type Job, type Locale, type Role, type UserRecord, type PlatformSettings, getCurrentUser, getPlatformSettings, getJobs, getJobById, loadAppLanguage, loadSavedJobs, saveAppLanguage, saveUser, requestPhoneOtp, signOut, translate, toggleSavedJob, verifyPhoneOtp, saveJob, updateJob, deleteJob, subscribeToJobs, refreshJobs, normalizePhone, type JobApplication, getJobApplication, getWorkerApplications, getOwnerApplications, submitJobApplication, subscribeToJobApplication, subscribeToWorkerApplications, subscribeToOwnerApplications, updateJobApplicationStatus } from "@/lib/workuru-data";
+import { CATEGORIES, type Job, type Locale, type Role, type UserRecord, type PlatformSettings, getCurrentUser, getPlatformSettings, getJobs, getJobById, loadAppLanguage, loadSavedJobs, saveAppLanguage, saveUser, requestPhoneOtp, signOut, translate, toggleSavedJob, verifyPhoneOtp, saveJob, updateJob, deleteJob, subscribeToJobs, refreshJobs, normalizePhone, type JobApplication, getJobApplication, getWorkerApplications, getOwnerApplications, submitJobApplication, subscribeToJobApplication, subscribeToWorkerApplications, subscribeToOwnerApplications, updateJobApplicationStatus, getOwnerVerificationStatus } from "@/lib/workuru-data";
 let ExpoImagePicker: any = null; try { ExpoImagePicker = require("expo-image-picker"); } catch {}
 
 const SAFE_PROOF_TYPES = typeof PROOF_TYPES !== "undefined" ? PROOF_TYPES : FALLBACK_PROOF_TYPES;
@@ -662,18 +662,19 @@ function CallsScreen({ calls, locale, onCallAgain, onClear, onGoJobs }: any) {
   );
 }
 
-function ModernJobCard({ job, isSaved, onSave, onCall, onOpen, locale }: any) {
+function ModernJobCard({ job, isSaved, onSave, onCall, onOpen, locale, showCall = false }: any) {
   const parseDesc = (desc: string) => { const get = (key: string) => { const m = desc.match(new RegExp(`${key}:([^|]+)`)); return m ? m[1] : ""; }; return { type: get("Type"), time: get("Time"), workers: get("Need"), salType: get("Sal") }; };
   const meta = parseDesc(job.description || ""); const isUrgent = meta.type?.toLowerCase().includes("urgent");
   const proofRequired = Boolean(job.proof_required || job.requires_proof);
+  const ownerVerified = job.owner_verified === true;
   const displayCategory = getCategoryName(job.category, locale);
   return (
     <View style={{ marginBottom: 14 }}>
       <Pressable onPress={onOpen} style={homeStyles.jobCardNew}>
-        <View style={homeStyles.cardTopRow}><View style={{ flexDirection: "row", gap: 8, alignItems: "center", flex: 1 }}><View style={homeStyles.catBadge}><Text style={homeStyles.catBadgeText}>{displayCategory}</Text></View>{isUrgent && <View style={homeStyles.urgentBadge}><MaterialCommunityIcons name="fire" size={10} color="#fff" /><Text style={homeStyles.urgentText}>Urgent</Text></View>}<View style={homeStyles.verifiedBadge}><MaterialCommunityIcons name="check-decagram" size={10} color={GREEN} /><Text style={homeStyles.verifiedText}>{locale === "ta" ? "சரிபார்க்கப்பட்டது" : "Verified"}</Text></View></View><Pressable onPress={onSave} style={[homeStyles.saveBtnNew, isSaved && homeStyles.saveBtnActive]}><MaterialCommunityIcons name={isSaved ? "bookmark" : "bookmark-outline"} size={18} color={isSaved ? "#fff" : MUTED} /></Pressable></View>
+        <View style={homeStyles.cardTopRow}><View style={{ flexDirection: "row", gap: 8, alignItems: "center", flex: 1 }}><View style={homeStyles.catBadge}><Text style={homeStyles.catBadgeText}>{displayCategory}</Text></View>{isUrgent && <View style={homeStyles.urgentBadge}><MaterialCommunityIcons name="fire" size={10} color="#fff" /><Text style={homeStyles.urgentText}>Urgent</Text></View>}{ownerVerified && <View style={homeStyles.verifiedBadge}><MaterialCommunityIcons name="check-decagram" size={10} color={GREEN} /><Text style={homeStyles.verifiedText}>{locale === "ta" ? "நிர்வாகம் சரிபார்த்தது" : "Admin verified"}</Text></View>}</View><Pressable onPress={onSave} style={[homeStyles.saveBtnNew, isSaved && homeStyles.saveBtnActive]}><MaterialCommunityIcons name={isSaved ? "bookmark" : "bookmark-outline"} size={18} color={isSaved ? "#fff" : MUTED} /></Pressable></View>
         <Text style={homeStyles.jobTitleNew} numberOfLines={2}>{job.title}</Text>
         <View style={homeStyles.metaRow}><View style={homeStyles.metaChip}><MaterialCommunityIcons name="map-marker" size={12} color={ORANGE} /><Text style={homeStyles.metaChipText}>{job.distance ? `${job.distance.toFixed(1)}km • ` : ""}{job.location || "Tamil Nadu"}</Text></View>{meta.workers ? <View style={homeStyles.metaChip}><MaterialCommunityIcons name="account-group" size={12} color={MUTED} /><Text style={homeStyles.metaChipText}>{locale === "ta" ? "தேவை" : "Need"} {meta.workers}</Text></View> : null}</View>
-        <View style={homeStyles.divider} /><View style={homeStyles.bottomRow}><View><View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}><Text style={homeStyles.priceText}>₹{job.salary}</Text><Text style={homeStyles.priceType}>/ {locale === "ta" ? (meta.salType?.includes("Work") ? "வேலைக்கு" : meta.salType?.includes("Day") ? "நாளுக்கு" : "நாளுக்கு") : (meta.salType || "Day")}</Text></View><Text style={homeStyles.postedText}>📍 {locale === "ta" ? "தமிழ்நாடு • 2 மணி முன்பு" : "Tamil Nadu • 2h ago"} {job.distance ? (locale === "ta" ? `• ${job.distance.toFixed(1)}கிமீ தொலைவில்` : `• ${job.distance.toFixed(1)}km away`) : ""}</Text></View>{proofRequired ? <View style={{ backgroundColor: "#FFF1E7", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 5 }}><MaterialCommunityIcons name="shield-lock-outline" size={15} color={ORANGE} /><Text style={{ color: ORANGE, fontSize: 10, fontWeight: "900" }}>{locale === "ta" ? "சான்றிதழ் தேவை" : "Proof required"}</Text></View> : <Pressable onPress={onCall} style={homeStyles.callBtnNew}><MaterialCommunityIcons name="phone" size={16} color="#fff" /><Text style={homeStyles.callBtnText}>{locale === "ta" ? "அழை" : "Call"}</Text></Pressable>}</View>
+        <View style={homeStyles.divider} /><View style={homeStyles.bottomRow}><View><View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}><Text style={homeStyles.priceText}>₹{job.salary}</Text><Text style={homeStyles.priceType}>/ {locale === "ta" ? (meta.salType?.includes("Work") ? "வேலைக்கு" : meta.salType?.includes("Day") ? "நாளுக்கு" : "நாளுக்கு") : (meta.salType || "Day")}</Text></View><Text style={homeStyles.postedText}>📍 {locale === "ta" ? "தமிழ்நாடு • 2 மணி முன்பு" : "Tamil Nadu • 2h ago"} {job.distance ? (locale === "ta" ? `• ${job.distance.toFixed(1)}கிமீ தொலைவில்` : `• ${job.distance.toFixed(1)}km away`) : ""}</Text></View>{proofRequired ? <View style={{ backgroundColor: "#FFF1E7", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 5 }}><MaterialCommunityIcons name="shield-lock-outline" size={15} color={ORANGE} /><Text style={{ color: ORANGE, fontSize: 10, fontWeight: "900" }}>{locale === "ta" ? "சான்றிதழ் தேவை" : "Proof required"}</Text></View> : showCall ? <Pressable onPress={onCall} style={homeStyles.callBtnNew}><MaterialCommunityIcons name="phone" size={16} color="#fff" /><Text style={homeStyles.callBtnText}>{locale === "ta" ? "அழை" : "Call"}</Text></Pressable> : <View style={{ backgroundColor: "#FFF8F0", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9 }}><Text style={{ color: ORANGE, fontSize: 10, fontWeight: "900" }}>{locale === "ta" ? "விவரங்களைப் பார்க்கவும்" : "View details"}</Text></View>}</View>
       </Pressable>
     </View>
   );
@@ -701,7 +702,7 @@ function MyPostedJobsScreen({ jobs, user, locale, onEdit, onDelete, refreshing, 
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}><View style={{ backgroundColor: "#FFF1E7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#FFE0CA" }}><Text style={{ color: ORANGE, fontSize: 10, fontWeight: "900" }}>{getCategoryName(job.category, locale)}</Text></View>{job.description?.includes("Today") || job.description?.includes("இன்று") ? <View style={{ backgroundColor: "#FF3B30", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}><Text style={{ color: "#fff", fontSize: 9, fontWeight: "900" }}>{isTamil ? "இன்று" : "Today"}</Text></View> : null}</View>
                 <Text style={{ color: "#0A1931", fontSize: 16, fontWeight: "900", marginTop: 10 }} numberOfLines={2}>{job.title}</Text>
-                <View style={{ flexDirection: "row", gap: 6, marginTop: 6, alignItems: "center" }}><MaterialCommunityIcons name="map-marker" size={12} color={MUTED} /><Text style={{ color: MUTED, fontSize: 11, fontWeight: "600" }}>{job.location} • ₹{job.salary}</Text></View>
+                <View style={{ flexDirection: "row", gap: 6, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}><MaterialCommunityIcons name="map-marker" size={12} color={MUTED} /><Text style={{ color: MUTED, fontSize: 11, fontWeight: "600" }}>{job.location} • ₹{job.salary}</Text>{(() => { const need = (job.description || "").match(/Need:([^|]+)/)?.[1]; return need ? <Text style={{ color: GREEN, fontSize: 11, fontWeight: "900" }}>• Need {need}</Text> : null; })()}</View>
               </View>
               <View style={{ gap: 8, alignItems: "center" }}><Pressable onPress={() => onEdit(job)} style={{ minWidth: 70, height: 36, borderRadius: 10, backgroundColor: "#0A1931", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 10 }}><MaterialCommunityIcons name="pencil" size={14} color="#fff" /><Text style={{ color: "#fff", fontSize: 11, fontWeight: "800" }}>{locale === "ta" ? "திருத்து" : "Edit"}</Text></Pressable><Pressable onPress={() => onDelete(job.id)} style={{ minWidth: 70, height: 36, borderRadius: 10, backgroundColor: "#FFF1E7", borderWidth: 1, borderColor: "#FFE0CA", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 10 }}><MaterialCommunityIcons name="delete-outline" size={14} color="#FF3B30" /><Text style={{ color: "#FF3B30", fontSize: 11, fontWeight: "800" }}>{locale === "ta" ? "நீக்கு" : "Delete"}</Text></Pressable></View>
             </View>
@@ -710,6 +711,15 @@ function MyPostedJobsScreen({ jobs, user, locale, onEdit, onDelete, refreshing, 
       )}
     </ScrollView>
   );
+}
+
+function JobsBrowserScreen({ locale, filteredJobs, filter, setFilter, search, setSearch, categoryCounts, nearActive, handleNear, locLoading, saved, onSave, onOpen }: any) {
+  return <>
+    <View style={styles.welcomeRow}><View><Text style={styles.eyebrowText}>{locale === "ta" ? "வேலை வாய்ப்புகள்" : "AVAILABLE JOBS"}</Text><Text style={styles.pageTitle}>{locale === "ta" ? "உங்கள் நாளுக்கு\nஏற்ற வேலையை\nகண்டறியுங்கள்" : "Find work that\nfits your day."}</Text></View><View style={styles.locationPill}><MaterialCommunityIcons name="map-marker" size={12} color={ORANGE} /><Text style={styles.locationPillText}>{locale === "ta" ? `தமிழ்நாடு • ${filteredJobs.length} வேலைகள்` : `Tamil Nadu • ${filteredJobs.length} jobs`}</Text></View></View>
+    <View style={homeStyles.searchWrap}><View style={homeStyles.searchBox}><MaterialCommunityIcons name="magnify" size={20} color={MUTED} /><TextInput value={search} onChangeText={setSearch} placeholder={locale === "ta" ? "வேலை தேடுங்கள், எ.கா. கொத்தனார்" : "Search work, e.g. Mason, Driver"} style={homeStyles.searchInput} placeholderTextColor="#B8A99D" />{search.length > 0 && <Pressable onPress={() => setSearch("")}><MaterialCommunityIcons name="close-circle" size={18} color={MUTED} /></Pressable>}</View><Pressable onPress={handleNear} style={[homeStyles.locationBtn, nearActive && homeStyles.locationBtnActive]}>{locLoading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name={nearActive ? "crosshairs-gps" : "navigation-variant-outline"} size={16} color="#fff" />}<Text style={homeStyles.locationBtnText}>{nearActive ? (locale === "ta" ? "அருகில் ✓" : "Near ✓") : (locale === "ta" ? "அருகில்" : "Near")}</Text></Pressable></View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>{["All", ...CATEGORIES].map((c) => { const count = categoryCounts[c] || 0; const isActive = filter === c; if (c !== "All" && count === 0) return null; return (<Pressable key={c} onPress={() => { Haptics.selectionAsync(); setFilter(c); }} style={[styles.filterChip, isActive && styles.filterChipActive]}><Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>{getCategoryName(c, locale)} {count > 0 ? `(${count})` : ""}</Text></Pressable>); })}</ScrollView>
+    {filteredJobs.length === 0 ? <View style={homeStyles.emptyBox}><MaterialCommunityIcons name="briefcase-search-outline" size={34} color={MUTED} /><Text style={homeStyles.emptyTitle}>{locale === "ta" ? "வேலைகள் இல்லை" : "No available jobs"}</Text><Text style={homeStyles.emptySub}>{locale === "ta" ? "பின்னர் மீண்டும் பார்க்கவும்" : "Check again later for new opportunities."}</Text></View> : filteredJobs.map((job: Job) => <ModernJobCard key={job.id} job={job} isSaved={saved.includes(job.id)} locale={locale} onSave={() => onSave(job)} onOpen={() => onOpen(job)} />)}
+  </>;
 }
 
 function PostNewJobScreen({ locale, user, onPublish, onUpdate, initialJob, loading }: any) {
@@ -846,7 +856,7 @@ function MyProofsSectionBoss({ user, locale }: any) {
   return (
     <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 16, marginTop: 14, borderWidth: 1, borderColor: "#FFF1E7", elevation: 2 }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <View><Text style={{ color: "#0A1931", fontSize: 13, fontWeight: "900" }}>{isTamil ? "எனது சான்றிதழ்கள்" : "MY PROOFS"}</Text><Text style={{ color: MUTED, fontSize: 10, fontWeight: "600", marginTop: 2 }}>{isTamil ? "விருப்பம் - Supabase la store aagum" : "Optional - Stored in Supabase"}</Text></View>
+        <View><Text style={{ color: "#0A1931", fontSize: 13, fontWeight: "900" }}>{isTamil ? "உரிமையாளர் சரிபார்ப்பு" : "OWNER VERIFICATION"}</Text><Text style={{ color: MUTED, fontSize: 10, fontWeight: "600", marginTop: 2 }}>{isTamil ? "ஆதாரத்தைச் சேர்க்கவும் • நிர்வாகம் சரிபார்க்கும்" : "Add business proof • Admin reviews it for your verified badge"}</Text></View>
         <Pressable onPress={() => setShowAdd(!showAdd)} style={{ backgroundColor: ORANGE, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexDirection: "row", alignItems: "center", gap: 4 }}>
           <MaterialCommunityIcons name={showAdd ? "close" : "plus"} size={14} color="#fff" /><Text style={{ color: "#fff", fontSize: 11, fontWeight: "800" }}>{showAdd ? (isTamil ? "மூடு" : "Close") : (isTamil ? "சேர்" : "Add")}</Text>
         </Pressable>
@@ -893,19 +903,20 @@ function MyProofsSectionBoss({ user, locale }: any) {
 
 function OwnerProfileBoss({ user, jobs, locale, onUpdateName, onLanguageChange, onAppLanguageChange, onDeleteAccount, onLogout, onTerms, onPrivacy, appTheme, appFontSize, onThemeChange, onFontSizeChange, onClearCache, onClearData }: any) {
 
-  const isTamil = locale === "ta"; const [editing, setEditing] = useState(false); const [businessName, setBusinessName] = useState(user?.name || "Uzhaivo User"); const myJobs = jobs.filter((j:any) => j.owner_id === user?.id || j.phone === user?.phone);
+  const isTamil = locale === "ta"; const [editing, setEditing] = useState(false); const [businessName, setBusinessName] = useState(user?.name || "Uzhaivo User"); const [verification, setVerification] = useState<any>({ verified: false, status: "pending", proofCount: 0 }); const myJobs = jobs.filter((j:any) => j.owner_id === user?.id || j.phone === user?.phone);
+  useEffect(() => { if (user?.id) getOwnerVerificationStatus(user.id).then(setVerification).catch(() => {}); }, [user?.id]);
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
       <View style={{ backgroundColor: "#fff", borderRadius: 24, padding: 20, borderWidth: 1, borderColor: "#FFF1E7", elevation: 3 }}>
         <View style={{ alignItems: "center" }}>
           <View style={{ width: 90, height: 90, borderRadius: 28, backgroundColor: ORANGE, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "#fff", elevation: 4 }}><Text style={{ color: "#fff", fontSize: 36, fontWeight: "900" }}>{businessName.charAt(0)}</Text></View>
           {editing ? (<View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}><View style={{ backgroundColor: "#FFF8F0", borderRadius: 12, borderWidth: 1, borderColor: "#FFE0CA", paddingHorizontal: 12, minWidth: 180 }}><TextInput value={businessName} onChangeText={setBusinessName} style={{ height: 44, fontWeight: "900", color: "#0A1931" }} autoFocus /></View><Pressable onPress={() => { onUpdateName(businessName); setEditing(false); }} style={{ backgroundColor: GREEN, width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" }}><MaterialCommunityIcons name="check" size={20} color="#fff" /></Pressable></View>) : (<View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}><Text style={{ color: "#0A1931", fontSize: 20, fontWeight: "900" }}>{businessName}</Text><Pressable onPress={() => setEditing(true)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "#FFF1E7", alignItems: "center", justifyContent: "center" }}><MaterialCommunityIcons name="pencil" size={14} color={ORANGE} /></Pressable></View>)}
-          <View style={{ flexDirection: "row", gap: 6, marginTop: 8, alignItems: "center" }}><Text style={{ color: MUTED, fontSize: 13 }}>{user?.phone}</Text><View style={{ backgroundColor: "#E8F5E9", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: "#C8E6C9" }}><MaterialCommunityIcons name="check-decagram" size={12} color={GREEN} /><Text style={{ color: GREEN, fontSize: 10, fontWeight: "900" }}>{isTamil ? "சரிபார்க்கப்பட்டது" : "Verified"}</Text></View></View><Text style={{ color: ORANGE, fontSize: 12, fontWeight: "800", marginTop: 6 }}>{isTamil ? "உரிமையாளர் • எனக்கு ஆட்கள் வேண்டும்" : "Owner • I need workers"}</Text>
+          <View style={{ flexDirection: "row", gap: 6, marginTop: 8, alignItems: "center" }}><Text style={{ color: MUTED, fontSize: 13 }}>{user?.phone}</Text><View style={{ backgroundColor: verification.verified ? "#E8F5E9" : "#FFF8F0", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: verification.verified ? "#C8E6C9" : "#FFE0CA" }}><MaterialCommunityIcons name={verification.verified ? "check-decagram" : "clock-outline"} size={12} color={verification.verified ? GREEN : ORANGE} /><Text style={{ color: verification.verified ? GREEN : ORANGE, fontSize: 10, fontWeight: "900" }}>{verification.verified ? (isTamil ? "நிர்வாகம் சரிபார்த்தது" : "Admin verified") : (isTamil ? "சரிபார்ப்பு நிலுவையில்" : "Verification pending")}</Text></View></View><Text style={{ color: ORANGE, fontSize: 12, fontWeight: "800", marginTop: 6 }}>{isTamil ? "உரிமையாளர் • எனக்கு ஆட்கள் வேண்டும்" : "Owner • I need workers"}</Text>
         </View>
         <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}><View style={{ flex: 1, backgroundColor: "#FFF8F0", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: "#FFE0CA", alignItems: "center" }}><Text style={{ color: ORANGE, fontSize: 22, fontWeight: "900" }}>{myJobs.length}</Text><Text style={{ color: MUTED, fontSize: 11, fontWeight: "700", marginTop: 2 }}>{isTamil ? "வேலைகள்" : "Jobs Posted"}</Text></View><View style={{ flex: 1, backgroundColor: "#E8F5E9", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: "#C8E6C9", alignItems: "center" }}><Text style={{ color: GREEN, fontSize: 22, fontWeight: "900" }}>4.8★</Text><Text style={{ color: GREEN, fontSize: 11, fontWeight: "700", marginTop: 2 }}>{isTamil ? "மதிப்பீடு" : "Rating"}</Text></View><View style={{ flex: 1, backgroundColor: "#FFF1E7", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: "#FFE0CA", alignItems: "center" }}><Text style={{ color: "#0A1931", fontSize: 22, fontWeight: "900" }}>12</Text><Text style={{ color: MUTED, fontSize: 11, fontWeight: "700", marginTop: 2 }}>{isTamil ? "பணியமர்த்தியது" : "Hired"}</Text></View></View>
       </View>
 
-      {/* MY PROOFS - Professional - Optional - Supabase Stored */}
+      {/* OWNER VERIFICATION - admin-reviewed proof */}
       <MyProofsSectionBoss user={user} locale={locale} />
 
       <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 16, marginTop: 14, borderWidth: 1, borderColor: "#FFF1E7" }}>
@@ -1117,7 +1128,7 @@ function WorkerProfileTop({ user, locale, onUpdate }: any) {
   </View>;
 }
 
-function ReceivedProofsScreen({ user, locale }: any) {
+function ReceivedProofsScreen({ user, locale, onJobUpdated }: any) {
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [loadingProofs, setLoadingProofs] = useState(false);
   const loadApplications = useCallback(async () => {
@@ -1140,6 +1151,7 @@ function ReceivedProofsScreen({ user, locale }: any) {
   };
   const updateStatus = async (application: JobApplication, status: "approved" | "rejected") => {
     try {
+      if (application.status !== "pending") return;
       if (status === "approved") {
         const job = await getJobById(application.job_id);
         if (job) {
@@ -1152,6 +1164,7 @@ function ReceivedProofsScreen({ user, locale }: any) {
             const nextDescription = (job.description || "").replace(/Need:([^|]+)/, `Need:${remainingNeed}`);
             await updateJob(job.id, { description: nextDescription } as any);
           }
+          if (onJobUpdated) await onJobUpdated();
         }
       }
       const updated = await updateJobApplicationStatus(application.id, status);
@@ -1322,10 +1335,10 @@ function JobDetailScreen({ job, locale, saved, onToggleSave, onBack, user, platf
       {application?.proof_image_url ? <Image source={{ uri: application.proof_image_url }} style={{ width: 120, height: 90, borderRadius: 12, alignSelf: "center", marginTop: 12 }} resizeMode="cover" /> : null}
       {submittedAt ? <Text style={{ color: MUTED, fontSize: 11, textAlign: "center", marginTop: 10 }}>Submitted {submittedAt}</Text> : null}
       <Text style={{ color: "#5A4D45", fontSize: 12, lineHeight: 18, fontWeight: "600", textAlign: "center", marginTop: 14 }}>{statusMessage}</Text>
-      {status === "approved" ? <Pressable onPress={() => Linking.openURL(`tel:${job.phone}`)} style={[detailStyles.callBtnLarge, { marginTop: 16 }]}><MaterialCommunityIcons name="phone" size={20} color="#fff" /><Text style={detailStyles.callBtnLargeText}>Call Job Owner</Text></Pressable> : null}
+      {status === "approved" ? <View style={{ marginTop: 16, backgroundColor: "#E8F5E9", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }}><MaterialCommunityIcons name="check-decagram" size={18} color={GREEN} /><Text style={{ color: GREEN, fontSize: 11, fontWeight: "800", flex: 1 }}>Owner contact is now available for your next step.</Text></View> : null}
     </View> : <>
       <View style={detailStyles.heroCard}>
-        <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}><View style={detailStyles.catPill}><Text style={detailStyles.catPillText}>{job.category}</Text></View><View style={detailStyles.verifiedPill}><MaterialCommunityIcons name="check-decagram" size={12} color={GREEN} /><Text style={detailStyles.verifiedPillText}>Verified Owner</Text></View></View>
+        <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}><View style={detailStyles.catPill}><Text style={detailStyles.catPillText}>{job.category}</Text></View>{job.owner_verified === true ? <View style={detailStyles.verifiedPill}><MaterialCommunityIcons name="check-decagram" size={12} color={GREEN} /><Text style={detailStyles.verifiedPillText}>Admin verified owner</Text></View> : null}</View>
         <Text style={detailStyles.title}>{job.title}</Text>
         <View style={detailStyles.salaryRow}><Text style={detailStyles.price}>₹{job.salary}</Text><Text style={detailStyles.priceType}> / day</Text></View>
         <Text style={detailStyles.postedInfo}>📍 {job.location} • Posted recently</Text>
@@ -1348,7 +1361,7 @@ function JobDetailScreen({ job, locale, saved, onToggleSave, onBack, user, platf
         {requiredSide !== "front" && proofImages.back ? <Image source={{ uri: proofImages.back }} style={{ width: "100%", height: 130, borderRadius: 12, marginTop: 10 }} resizeMode="cover" /> : null}
         <Pressable onPress={submitProof} disabled={submitting} style={{ marginTop: 12, backgroundColor: GREEN, borderRadius: 12, paddingVertical: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>{submitting ? <ActivityIndicator color="#fff" size="small" /> : <><MaterialCommunityIcons name="send-check" size={17} color="#fff" /><Text style={{ color: "#fff", fontSize: 13, fontWeight: "900" }}>Submit Proofs</Text></>}</Pressable>
       </View>}
-      {canContactOwner ? <View style={detailStyles.bottomActions}><Pressable onPress={() => Linking.openURL(`tel:${job.phone}`)} style={detailStyles.callBtnLarge}><MaterialCommunityIcons name="phone" size={20} color="#fff" /><Text style={detailStyles.callBtnLargeText}>Call Owner</Text></Pressable></View> : <View style={{ marginTop: 16, backgroundColor: "#FFF1E7", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }}><MaterialCommunityIcons name="shield-lock-outline" size={18} color={ORANGE} /><Text style={{ color: ORANGE, fontSize: 11, fontWeight: "800", flex: 1 }}>Owner phone and WhatsApp are available after proof approval.</Text></View>}
+      {canContactOwner ? <View style={detailStyles.infoBox}><MaterialCommunityIcons name="phone-outline" size={20} color={GREEN} /><Text style={detailStyles.infoLabel}>OWNER CONTACT</Text><Text style={detailStyles.infoValue}>{job.phone}</Text></View> : <View style={{ marginTop: 16, backgroundColor: "#FFF1E7", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }}><MaterialCommunityIcons name="shield-lock-outline" size={18} color={ORANGE} /><Text style={{ color: ORANGE, fontSize: 11, fontWeight: "800", flex: 1 }}>Owner phone and WhatsApp are available after proof approval.</Text></View>}
     </>}
   </ScrollView>;
 }
@@ -1440,23 +1453,9 @@ export function UzhaivoApp() {
             onDelete={(id:string) => { Alert.alert(locale==="ta" ? "வேலையை நீக்கவா?" : "Delete Job?", locale==="ta" ? "நீக்க வேண்டுமா?" : "Are you sure?", [{ text: locale==="ta" ? "ரத்து" : "Cancel" }, { text: locale==="ta" ? "நீக்கு" : "Delete", style: "destructive", onPress: async () => { try { await deleteJob(id); const j = await getJobs(); setJobs(j); } catch(e){ console.error(e); } Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }}]); }}
           />
         )}
-        {step !== "detail" && activeTab === "proofs" && user?.role === "owner" && <ReceivedProofsScreen user={user} locale={locale} />}
+        {step !== "detail" && activeTab === "proofs" && user?.role === "owner" && <ReceivedProofsScreen user={user} locale={locale} onJobUpdated={onRefresh} />}
         {step !== "detail" && activeTab === "applied" && user?.role !== "owner" && <AppliedJobsScreen user={user} locale={locale} onOpenJob={(job: Job) => { setSelectedJob(job); setStep("detail"); }} />}
-        {step !== "detail" && activeTab === "home" && (
-          user?.role === "owner" ? (
-            <MyPostedJobsScreen jobs={jobs} user={user} locale={locale}
-              onEdit={(job:any) => { setEditingJob(job); setActiveTab("addJob"); }}
-              onDelete={(id:string) => { setJobs((prev:any) => prev.filter((j:any) => j.id !== id)); }}
-            />
-          ) : (
-            <>
-              <View style={styles.welcomeRow}><View><Text style={styles.eyebrowText}>{t("welcomeBack")}</Text><Text style={styles.pageTitle}>{locale==="ta" ? "உங்கள் நாளுக்கு\nஏற்ற வேலையை\nகண்டறியுங்கள்" : "Find work that\nfits your day."}</Text></View><View style={styles.locationPill}><MaterialCommunityIcons name="map-marker" size={12} color={ORANGE} /><Text style={styles.locationPillText}>{locale === "ta" ? `தமிழ்நாடு • ${filteredJobs.length} வேலைகள்` : `Tamil Nadu • ${filteredJobs.length} jobs`}</Text></View></View>
-              <View style={homeStyles.searchWrap}><View style={homeStyles.searchBox}><MaterialCommunityIcons name="magnify" size={20} color={MUTED} /><TextInput value={search} onChangeText={setSearch} placeholder={locale==="ta" ? "வேலை தேடுங்கள், எ.கா. கொத்தனார்" : "Search work, e.g. Mason, Driver"} style={homeStyles.searchInput} placeholderTextColor="#B8A99D" />{search.length > 0 && <Pressable onPress={() => setSearch("")}><MaterialCommunityIcons name="close-circle" size={18} color={MUTED} /></Pressable>}</View><Pressable onPress={handleNear} style={[homeStyles.locationBtn, nearActive && homeStyles.locationBtnActive]}>{locLoading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name={nearActive ? "crosshairs-gps" : "navigation-variant-outline"} size={16} color="#fff" />}<Text style={homeStyles.locationBtnText}>{nearActive ? (locale === "ta" ? "அருகில் ✓" : "Near ✓") : (locale === "ta" ? "அருகில்" : "Near")}</Text></Pressable></View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>{["All", ...CATEGORIES].map((c) => { const count = categoryCounts[c] || 0; const isActive = filter === c; if (c !== "All" && count === 0) return null; return (<Pressable key={c} onPress={() => { Haptics.selectionAsync(); setFilter(c); }} style={[styles.filterChip, isActive && styles.filterChipActive]}><Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>{getCategoryName(c, locale)} {count > 0 ? `(${count})` : ""}</Text></Pressable>); })}</ScrollView>
-              {filteredJobs.map((job) => (<ModernJobCard key={job.id} job={job} isSaved={saved.includes(job.id)} locale={locale} onSave={async () => { const s = await toggleSavedJob(job.id); setSaved(s); }} onCall={() => { saveCallHistory(job); Linking.openURL(`tel:${job.phone}`); }} onOpen={() => { setSelectedJob(job); setStep("detail"); }} />))}
-            </>
-          )
-        )}
+        {step !== "detail" && activeTab === "home" && <JobsBrowserScreen locale={locale} filteredJobs={filteredJobs} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} categoryCounts={categoryCounts} nearActive={nearActive} handleNear={handleNear} locLoading={locLoading} saved={saved} onSave={async (job: Job) => { const s = await toggleSavedJob(job.id); setSaved(s); }} onOpen={(job: Job) => { setSelectedJob(job); setStep("detail"); }} />}
         {activeTab === "calls" && step !== "detail" && <CallsScreen calls={callHistory} locale={locale} onCallAgain={(c: any) => Linking.openURL(`tel:${c.phone}`)} onClear={async () => { Alert.alert(locale==="ta" ? "அழைப்புகளை அழிக்கவா?" : "Clear calls?", locale==="ta" ? "எல்லாம் நீக்கப்படும்" : "All call history will be deleted", [{ text: locale==="ta" ? "ரத்து" : "Cancel" }, { text: locale==="ta" ? "அழி" : "Clear", style: "destructive", onPress: async () => { setCallHistory([]); await AsyncStorage.removeItem("uzhaivo_calls"); } }]); }} onGoJobs={() => setActiveTab(user?.role === "owner" ? "addJob" : "home")} />}
         {activeTab === "profile" && step !== "detail" && (
           settingsOpen ? <AppSettingsScreen locale={locale} theme={appTheme} fontSize={appFontSize} onThemeChange={changeAppTheme} onFontSizeChange={changeAppFontSize} onLanguageChange={changeAppLanguage} onClearCache={clearAppCache} onClearData={clearAppData} onBack={() => setSettingsOpen(false)} /> : user?.role === "owner" ? (
@@ -1487,6 +1486,7 @@ export function UzhaivoApp() {
       <View style={styles.bottomNav}>
         {user?.role === "owner" ? (
           [
+            { id: "home", icon: "briefcase-search", label: locale==="ta" ? "வேலைகள்" : "Jobs" },
             { id: "addJob", icon: "plus-box", label: locale==="ta" ? POST_TA.postTab : "Post" },
             { id: "myJobs", icon: "briefcase-check", label: locale==="ta" ? POST_TA.myJobsTab : "My Jobs" },
             { id: "proofs", icon: "file-check-outline", label: locale==="ta" ? "சான்றிதழ்கள்" : "Proofs" },
@@ -1497,7 +1497,6 @@ export function UzhaivoApp() {
           [
             { id: "home", icon: "home", label: locale==="ta" ? "வேலைகள்" : "Jobs" },
             { id: "applied", icon: "briefcase-check-outline", label: locale==="ta" ? "விண்ணப்பங்கள்" : "Applied" },
-            { id: "calls", icon: "phone", label: locale==="ta" ? "அழைப்பு" : "Calls" },
             { id: "profile", icon: "account", label: locale==="ta" ? "சுயவிவரம்" : "Profile" }
           ].map((it) => { const isActive = activeTab === it.id; return <Pressable key={it.id} onPress={() => { Haptics.selectionAsync(); if(step==="detail") setStep("home"); setActiveTab(it.id); }} style={styles.navItem}><View style={[styles.navIconWrap, isActive && styles.navIconWrapActive]}><MaterialCommunityIcons name={it.icon as any} size={20} color={isActive ? "#fff" : MUTED} /></View><Text style={[styles.navLabel, isActive && styles.navLabelActive]}>{it.label}</Text></Pressable>; })
         )}
