@@ -104,6 +104,32 @@ const SAFE_PROOF_TRANSLATIONS = typeof PROOF_TYPE_TRANSLATIONS !== "undefined" ?
 const PROOF_SIDES = ["front", "back", "front_back"] as const;
 const encodeProofRequest = (note: string, sides: Record<string, string>) => `__PROOF_REQUEST__${JSON.stringify({ note: note || "", sides })}`;
 const decodeProofRequest = (value: string) => { try { if (value?.startsWith("__PROOF_REQUEST__")) return JSON.parse(value.slice("__PROOF_REQUEST__".length)); } catch {} return { note: value || "", sides: {} }; };
+
+const normalizeJobForDetail = (input: any): Job => {
+  const rawProofTypes = input?.proof_types;
+  let proofTypes: string[] | undefined;
+  if (Array.isArray(rawProofTypes)) proofTypes = rawProofTypes.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  else if (typeof rawProofTypes === "string") {
+    try {
+      const parsed = JSON.parse(rawProofTypes);
+      if (Array.isArray(parsed)) proofTypes = parsed.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    } catch {}
+  }
+  return {
+    ...input,
+    id: String(input?.id || ""),
+    title: typeof input?.title === "string" ? input.title : "Applied job",
+    category: typeof input?.category === "string" ? input.category : "Other",
+    salary: Number.isFinite(Number(input?.salary)) ? Number(input.salary) : 0,
+    district: typeof input?.district === "string" ? input.district : "Tamil Nadu",
+    location: typeof input?.location === "string" ? input.location : "Tamil Nadu",
+    phone: typeof input?.phone === "string" ? input.phone : "",
+    description: typeof input?.description === "string" ? input.description : "",
+    created_at: typeof input?.created_at === "string" && input.created_at ? input.created_at : new Date().toISOString(),
+    proof_description: typeof input?.proof_description === "string" ? input.proof_description : "",
+    proof_types: proofTypes,
+  } as Job;
+};
 const ORANGE = "#FF6B00"; const MUTED = "#8A7D74"; const GREEN = "#00A85A"; const ROLE_ORANGE = "#FF6B00"; const ROLE_GREEN = "#00A86B"; const ROLE_NAVY = "#0B1932"; const ROLE_MUTED = "#6F7B8C";
 type Props = { locale?: "en" | "ta"; onSelectRole: (role: "worker" | "owner") => void; };
 
@@ -1214,7 +1240,8 @@ function AppliedJobsScreen({ user, locale, onOpenJob }: any) {
       const next: Record<string, Job> = {};
       const activeApplications: JobApplication[] = [];
       pairs.forEach(([id, job], index) => {
-        if (job && !isCompletedJob(job)) { next[id] = job; activeApplications.push(rows[index]); }
+        const safeJob = job ? normalizeJobForDetail(job) : null;
+        if (safeJob && !isCompletedJob(safeJob)) { next[id] = safeJob; activeApplications.push(rows[index]); }
       });
       setApplications(activeApplications);
       setJobsById(next);
@@ -1245,11 +1272,12 @@ function AppliedJobsScreen({ user, locale, onOpenJob }: any) {
 }
 
 function JobDetailScreen({ job, locale, saved, onToggleSave, onBack, user, platformSettings = {} }: any) {
+  job = normalizeJobForDetail(job);
   const isTamil = locale === "ta";
   const [application, setApplication] = useState<JobApplication | null>(null);
   const defaultProofTypes = ["Aadhaar Card", "PAN Card", "Driving License", "Insurance", "Work Photo", "Others"];
   const proofRequest = decodeProofRequest(job.proof_description || "");
-  const proofTypes = job.proof_types?.length ? job.proof_types : defaultProofTypes;
+  const proofTypes = Array.isArray(job.proof_types) && job.proof_types.length ? job.proof_types : defaultProofTypes;
   const [selectedProofType, setSelectedProofType] = useState(proofTypes[0] || "Aadhaar Card");
   const [proofImages, setProofImages] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
