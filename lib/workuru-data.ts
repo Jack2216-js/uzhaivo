@@ -980,7 +980,11 @@ export async function getWorkerApplications(workerId?: string): Promise<JobAppli
 
 export function subscribeToWorkerApplications(workerId: string, callback: (applications: JobApplication[]) => void) {
   if (!supabase) return () => {};
-  const channel = (supabase as any).channel(`worker-applications-${workerId}`).on("postgres_changes", { event: "*", schema: "public", table: "job_applications", filter: `worker_id=eq.${workerId}` }, async () => {
+  // A worker can have both the Applied Jobs screen and the home-screen approval
+  // tracker mounted in the same session. Use a unique channel per listener so
+  // Supabase does not reject a second postgres_changes callback on one channel.
+  const channelName = `worker-applications-${workerId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const channel = (supabase as any).channel(channelName).on("postgres_changes", { event: "*", schema: "public", table: "job_applications", filter: `worker_id=eq.${workerId}` }, async () => {
     callback(await getWorkerApplications(workerId));
   }).subscribe();
   return () => { try { (supabase as any).removeChannel(channel); } catch {} };
